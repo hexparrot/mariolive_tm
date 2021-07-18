@@ -25,6 +25,8 @@ from evdev import InputDevice, categorize, ecodes
 wheel_buttons = InputDevice('/dev/input/event1')
 wheel_steering = open('/dev/input/js0', 'rb')
 
+pedals_device = InputDevice('/dev/input/event2')
+
 import array, struct
 
 # Get the device name.
@@ -47,8 +49,23 @@ async def buttons(device, controller_state, cli):
                     await asyncio.create_task(button_press(controller_state, 'a'))
                 elif not ev.value: # right button return up
                     await asyncio.create_task(button_release(controller_state, 'a'))
-        if ev.type == 3: # wheel
+        elif ev.type == 3: # wheel
             await asyncio.create_task(cli.cmd_stick('l', 'horizontal', ev.value))
+
+async def pedals(device, controller_state):
+    async for ev in device.async_read_loop():
+        #print(repr(ev))
+        if ev.type == 3:
+            if ev.code == 0:
+                if ev.value: #any and all nonzero values > 0
+                    await asyncio.create_task(button_press(controller_state, 'a'))
+                else:
+                    await asyncio.create_task(button_release(controller_state, 'a'))
+            elif ev.code == 1:
+                if ev.value: #any and all nonzero values > 0
+                    await asyncio.create_task(button_press(controller_state, 'b'))
+                else:
+                    await asyncio.create_task(button_release(controller_state, 'b'))
 
 async def _main():
     # Get controller name to emulate from arguments
@@ -70,7 +87,10 @@ async def _main():
     c_cli = ControllerCLI(controller_state)
 
     while True:
-        await buttons(wheel_buttons, controller_state, c_cli)
+        await asyncio.gather(
+            buttons(wheel_buttons, controller_state, c_cli),
+            pedals(pedals_device, controller_state)
+        )
 
 if __name__ == '__main__':
     log.configure()
