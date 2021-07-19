@@ -30,6 +30,7 @@ pedals_device = InputDevice('/dev/input/event2')
 import array, struct
 
 # Get the device name.
+#https://gist.github.com/emdeex/97b771b264bebbd1e18dd897404040be
 buf = array.array('B', [0] * 64)
 ioctl(wheel_steering, 0x80006a13 + (0x10000 * len(buf)), buf) # JSIOCGNAME(len)
 js_name = buf.tobytes().rstrip(b'\x00').decode('utf-8')
@@ -56,13 +57,17 @@ async def pedals(device, controller_state):
     async for ev in device.async_read_loop():
         #print(repr(ev))
         if ev.type == 3:
-            if ev.code == 0:
-                if ev.value: #any and all nonzero values > 0
+            if ev.code == 0: # accel
+                if ev.value > 400: #any and all nonzero values > x <= 4095
+                    #help alleviate contention of on/off state of pedals as you
+                    #can unwittingly be pushing both a/b with 65535 steps of precision
                     await asyncio.create_task(button_press(controller_state, 'a'))
                 else:
                     await asyncio.create_task(button_release(controller_state, 'a'))
-            elif ev.code == 1:
-                if ev.value: #any and all nonzero values > 0
+            elif ev.code == 1: # leftfoot brake
+                if ev.value > 6500: #any and all nonzero values > x <= 65535
+                    # this allows a sooner de-application of brake to follow the pedal
+                    # returning to 0. deadzone otherwise is too overpowering
                     await asyncio.create_task(button_press(controller_state, 'b'))
                 else:
                     await asyncio.create_task(button_release(controller_state, 'b'))
@@ -96,3 +101,4 @@ if __name__ == '__main__':
     log.configure()
     loop = asyncio.get_event_loop()
     asyncio.run(_main())
+
